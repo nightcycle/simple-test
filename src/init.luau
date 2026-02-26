@@ -14,6 +14,7 @@ export type TestResult = Test.TestResult
 export type Parameter = Parameter.Parameter
 export type Summary = Summary.Summary
 export type SummaryType = Summary.SummaryType
+export type JSONValue = Parameter.JSONValue
 -- Constants
 local CONSTANTS = require(script.CONSTANTS)
 -- Variables

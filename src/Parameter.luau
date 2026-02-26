@@ -25,6 +25,7 @@ export type Parameter =
 	| Color3Parameter
 	| BrickColorParameter
 	| CustomParameter
+	| ChooseParameter
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
 	Key: string,
@@ -33,16 +34,31 @@ type CustomParameter = {
 	SerializeCallback: (customValue: any?) -> JSONValue,
 }
 Parameter.Custom = {
-	new = function(
+	new = function<V>(
 		key: string,
-		method: (Random) -> any?,
-		serializeCallback: (customValue: any?) -> JSONValue
+		method: (Random) -> V,
+		serializeCallback: ((customValue: V) -> JSONValue)?
 	): CustomParameter
 		return {
 			Key = key,
 			Type = "Custom",
 			Method = method,
-			SerializeCallback = serializeCallback,
+			SerializeCallback = serializeCallback
+				or function(value: any?): JSONValue
+					if
+						typeof(value) == "table"
+						or typeof(value) == "number"
+						or typeof(value) == "string"
+						or typeof(value) == "boolean"
+						or value == nil
+					then
+						return value
+					else
+						error(
+							`Cannot serialize value of type "{typeof(value)}" for CustomParameter without a custom SerializeCallback`
+						)
+					end
+				end,
 		}
 	end,
 	generate = function(param: CustomParameter, rng: Random): any?
@@ -279,6 +295,46 @@ Parameter.Literal = {
 	end :: (any, Random) -> string,
 	serialize = function(param: LiteralParameter, value: any?): JSONValue
 		return value
+	end :: (any, any?) -> JSONValue,
+}
+
+type ChooseParameter = {
+	Key: string,
+	Type: "Choose",
+	Values: { any },
+	SerializeCallback: (customValue: any?) -> JSONValue,
+}
+Parameter.Choose = {
+	new = function<V>(key: string, values: { V }, serializeCallback: ((customValue: V) -> JSONValue)?): ChooseParameter
+		assert(#values > 0, `need more than 0 values to choose from`)
+		return {
+			Key = key,
+			Type = "Choose",
+			Values = values,
+			SerializeCallback = serializeCallback
+				or function(value: any?): JSONValue
+					if
+						typeof(value) == "table"
+						or typeof(value) == "number"
+						or typeof(value) == "string"
+						or typeof(value) == "boolean"
+						or value == nil
+					then
+						return value
+					else
+						error(
+							`Cannot serialize value of type "{typeof(value)}" for ChooseParameter without a custom serializeCallback`
+						)
+					end
+				end,
+		}
+	end,
+	generate = function(param: ChooseParameter, rng: Random): any
+		local index = rng:NextInteger(1, #param.Values)
+		return param.Values[index]
+	end :: (any, Random) -> any,
+	serialize = function(param: ChooseParameter, value: any?): JSONValue
+		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
 }
 
