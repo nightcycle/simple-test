@@ -44,7 +44,8 @@ export type Parameter =
 	| SetParameter
 	| FilterParameter
 	| FallbackParameter
-	| RaffleParameter
+	| ComputedParameter
+
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
 	Key: string,
@@ -456,6 +457,40 @@ Parameter.Filter = {
 	end :: (any, Random) -> any,
 	serialize = function(param: FilterParameter, value: any?): JSONValue
 		return Parameter.Any.serialize(param.ValueType, value)
+	end :: (any, any?) -> JSONValue,
+}
+
+type ComputedParameter = {
+	Key: string,
+	Type: "Computed",
+	Inputs: { Parameter },
+	ComputeFunc: (...any?) -> any,
+	SerializeCallback: (customValue: any?) -> JSONValue,
+}
+Parameter.Computed = {
+	new = function(
+		key: string,
+		inputs: { Parameter },
+		computeFunc: (...any?) -> any,
+		serializeCallback: ((customValue: any?) -> JSONValue)?
+	): ComputedParameter
+		return {
+			Key = key,
+			Type = "Computed",
+			Inputs = inputs,
+			ComputeFunc = computeFunc,
+			SerializeCallback = serializeCallback or fallbackSerializer,
+		}
+	end,
+	generate = function(param: ComputedParameter, rng: Random): any
+		local inputValues: { any } = {}
+		for i, input in param.Inputs do
+			inputValues[i] = Parameter.Any.generate(input, rng)
+		end
+		return param.ComputeFunc(table.unpack(inputValues, 1, #param.Inputs))
+	end :: (any, Random) -> any,
+	serialize = function(param: ComputedParameter, value: any?): JSONValue
+		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
 }
 
