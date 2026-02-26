@@ -26,6 +26,7 @@ export type Parameter =
 	| BrickColorParameter
 	| CustomParameter
 	| ChooseParameter
+	| SetParameter
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
 	Key: string,
@@ -350,9 +351,9 @@ Parameter.Array = {
 	new = function(
 		key: string,
 		valueType: Parameter,
-		isFrozen: boolean?,
 		minLength: number?,
-		maxLength: number?
+		maxLength: number?,
+		isFrozen: boolean?
 	): ArrayParameter
 		return {
 			Key = key,
@@ -370,6 +371,70 @@ Parameter.Array = {
 		local result = {}
 		for i = 1, length do
 			local value = Parameter.Any.generate(param.ValueType, rng)
+			result[i] = value
+		end
+		if param.IsFrozen then
+			return table.freeze(result)
+		end
+		return result
+	end :: (any, Random) -> { any },
+	serialize = function(param: ArrayParameter, value: any?): JSONValue
+		if typeof(value) == "table" then
+			local result = {}
+			for i, v in value do
+				result[i] = Parameter.Any.serialize(param.ValueType, v)
+			end
+			return result
+		end
+		return nil
+	end :: (any, any?) -> JSONValue,
+}
+
+type SetParameter = {
+	Key: string,
+	Type: "Set",
+	ValueType: Parameter,
+	MinLength: number?,
+	MaxLength: number?,
+	IsFrozen: boolean?,
+	HashFunc: (v: any?) -> string,
+}
+Parameter.Set = {
+	new = function(
+		key: string,
+		valueType: Parameter,
+		minLength: number?,
+		maxLength: number?,
+		isFrozen: boolean?,
+		hashFunc: ((v: any?) -> string)?
+	): SetParameter
+		return {
+			Key = key,
+			Type = "Set",
+			ValueType = valueType,
+			IsFrozen = isFrozen,
+			MinLength = minLength,
+			MaxLength = maxLength,
+			HashFunc = hashFunc or tostring,
+		}
+	end,
+	generate = function(param: SetParameter, rng: Random): { any }
+		local minLength = math.max(param.MinLength or 1, 1)
+		local maxLength = math.max(minLength, param.MaxLength or CONSTANTS.DEFAULT_TABLE_SIZE)
+		local length = rng:NextInteger(minLength, maxLength)
+		local result = {}
+		local hashMap: { [string]: true? } = {}
+		for i = 1, length do
+			local value: any?
+			local hash: string
+			local maxRuns = 0
+			repeat
+				value = Parameter.Any.generate(param.ValueType, rng)
+				hash = param.HashFunc(value)
+				maxRuns += 1
+				assert(maxRuns < 10_000, `Too many attempts to generate unique value for SetParameter "{param.Key}".`)
+			until hashMap[hash] == nil
+			hashMap[hash] = true
 			result[i] = value
 		end
 		if param.IsFrozen then
