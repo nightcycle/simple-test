@@ -27,6 +27,7 @@ export type Parameter =
 	| CustomParameter
 	| ChooseParameter
 	| SetParameter
+	| FilterParameter
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
 	Key: string,
@@ -390,6 +391,39 @@ Parameter.Array = {
 	end :: (any, any?) -> JSONValue,
 }
 
+type FilterParameter = {
+	Key: string,
+	Type: "Filter",
+	ValueType: Parameter,
+	FilterFunc: (v: any?) -> boolean,
+}
+Parameter.Filter = {
+	new = function(key: string, valueType: Parameter, filterFunc: (v: any?) -> boolean): FilterParameter
+		return {
+			Key = key,
+			Type = "Filter",
+			ValueType = valueType,
+			FilterFunc = filterFunc,
+		}
+	end,
+	generate = function(param: FilterParameter, rng: Random): any
+		local value: any?
+		local maxRuns = 0
+		repeat
+			value = Parameter.Any.generate(param.ValueType, rng)
+			maxRuns += 1
+			assert(
+				maxRuns < CONSTANTS.MAX_RETRIES,
+				`Too many attempts to generate unique value for FilterParameter "{param.Key}".`
+			)
+		until param.FilterFunc(value)
+		return value
+	end :: (any, Random) -> any,
+	serialize = function(param: FilterParameter, value: any?): JSONValue
+		return Parameter.Any.serialize(param.ValueType, value)
+	end :: (any, any?) -> JSONValue,
+}
+
 type SetParameter = {
 	Key: string,
 	Type: "Set",
@@ -432,7 +466,10 @@ Parameter.Set = {
 				value = Parameter.Any.generate(param.ValueType, rng)
 				hash = param.HashFunc(value)
 				maxRuns += 1
-				assert(maxRuns < 10_000, `Too many attempts to generate unique value for SetParameter "{param.Key}".`)
+				assert(
+					maxRuns < CONSTANTS.MAX_RETRIES,
+					`Too many attempts to generate unique value for SetParameter "{param.Key}".`
+				)
 			until hashMap[hash] == nil
 			hashMap[hash] = true
 			result[i] = value
