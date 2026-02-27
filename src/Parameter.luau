@@ -6,6 +6,7 @@ local HttpService = game:GetService("HttpService")
 -- Types
 -- Constants
 local CONSTANTS = require(script.Parent.CONSTANTS)
+local ENV = require(script.Parent.ENV)
 -- Variables
 -- References
 -- Private Functions
@@ -450,7 +451,7 @@ Parameter.Filter = {
 			value = Parameter.Any.generate(param.ValueType, rng)
 			maxRuns += 1
 			assert(
-				maxRuns < CONSTANTS.MAX_RETRIES,
+				maxRuns < ENV.MAX_RETRIES,
 				`Too many attempts to generate unique value for FilterParameter "{param.Key}".`
 			)
 		until param.FilterFunc(value)
@@ -526,7 +527,7 @@ Parameter.Set = {
 	generate = function(param: SetParameter, rng: Random): { any }
 		local minLength = math.max(param.MinLength or 1, 1)
 		local maxLength = math.max(minLength, param.MaxLength or CONSTANTS.DEFAULT_TABLE_SIZE)
-		local length = rng:NextInteger(minLength, maxLength)
+		local length = if minLength == maxLength then minLength else rng:NextInteger(minLength, maxLength)
 		local result = {}
 		local hashMap: { [string]: true? } = {}
 		for i = 1, length do
@@ -538,7 +539,7 @@ Parameter.Set = {
 				hash = param.HashFunc(value)
 				maxRuns += 1
 				assert(
-					maxRuns < CONSTANTS.MAX_RETRIES,
+					maxRuns < ENV.MAX_RETRIES,
 					`Too many attempts to generate unique value for SetParameter "{param.Key}".`
 				)
 			until hashMap[hash] == nil
