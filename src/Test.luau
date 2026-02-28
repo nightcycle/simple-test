@@ -124,7 +124,14 @@ return {
 		do
 			local isAllPermuted = true
 			local function getAvailablePerms(paramCount: number)
-				local out = math.floor(test.Iterations ^ (1 / paramCount))
+				local iterations = test.Iterations
+				for _, perms in permutedValues do
+					if typeof(perms) ~= "number" then
+						iterations /= #perms
+						paramCount -= 1
+					end
+				end
+				local out = math.floor(iterations ^ (1 / math.max(0, paramCount)))
 				Debug.log(
 					`Permutations available per parameter for {paramCount} parameters for {test.Iterations} iterations: {out}`
 				)
