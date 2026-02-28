@@ -4,6 +4,7 @@
 -- Modules
 local Parameter = require(script.Parent.Parameter)
 local ENV = require(script.Parent.ENV)
+local Debug = require(script.Parent.Debug)
 -- Types
 type Parameter = Parameter.Parameter
 -- Constants
@@ -21,7 +22,7 @@ export type TestResult =
 		Parameters: { { key: string, value: Parameter.JSONValue } },
 	}
 export type Test = {
-	Type: "NightTest",
+	Type: "SimpleTest",
 	Iterations: number,
 	Parameters: { Parameter },
 	Func: (...any) -> boolean,
@@ -29,14 +30,14 @@ export type Test = {
 function Test(v: any?): (boolean, string?)
 	if
 		type(v) == "table"
-		and v.Type == "NightTest"
+		and v.Type == "SimpleTest"
 		and typeof(v.Iterations) == "number"
 		and typeof(v.Parameters) == "table"
 		and typeof(v.Func) == "function"
 	then
 		return true, nil
 	end
-	return false, "Expected a NightTest"
+	return false, "Expected a SimpleTest"
 end
 export type TestMap = { [string]: Test }
 function TestMap(v: any?): (boolean, string?)
@@ -46,15 +47,15 @@ function TestMap(v: any?): (boolean, string?)
 			count += 1
 			local isTest, err = Test(t)
 			if not isTest then
-				return false, `Expected a table of NightTests, but key "{k}" is not a NightTest: {err}`
+				return false, `Expected a table of SimpleTests, but key "{k}" is not a SimpleTest: {err}`
 			end
 		end
 		if count == 0 then
-			return false, "Expected a non-empty table of NightTests"
+			return false, "Expected a non-empty table of SimpleTests"
 		end
 		return true, nil
 	end
-	return false, "Expected a table of NightTests"
+	return false, "Expected a table of SimpleTests"
 end
 export type TestTree = { [string]: Test | TestTree }
 function TestTree(v: any?): (boolean, string?)
@@ -65,22 +66,22 @@ function TestTree(v: any?): (boolean, string?)
 			do
 				local isTest, err = Test(t)
 				if not isTest then
-					return false, `Expected a tree of NightTests, but key "{k}" is not a NightTest: {err}`
+					return false, `Expected a tree of SimpleTests, but key "{k}" is not a SimpleTest: {err}`
 				end
 			end
 			do
 				local isTestTree, err = TestTree(t)
 				if not isTestTree then
-					return false, `Expected a tree of NightTests, but key "{k}" is not a NightTest or TestTree: {err}`
+					return false, `Expected a tree of SimpleTests, but key "{k}" is not a SimpleTest or TestTree: {err}`
 				end
 			end
 		end
 		if count == 0 then
-			return false, "Expected a non-empty tree of NightTests"
+			return false, "Expected a non-empty tree of SimpleTests"
 		end
 		return true, nil
 	end
-	return false, "Expected a tree of NightTests"
+	return false, "Expected a tree of SimpleTests"
 end
 function pollForPause(duration: number)
 	local lastPause = tick()
@@ -104,7 +105,7 @@ return {
 		params = table.clone(params)
 		table.freeze(params)
 		local out: Test = {
-			Type = "NightTest" :: "NightTest",
+			Type = "SimpleTest" :: "SimpleTest",
 			Iterations = iterations or ENV.DEFAULT_ITERATIONS,
 			Parameters = params,
 			Func = func,
@@ -116,21 +117,33 @@ return {
 		local parameters: { { any } } = table.create(test.Iterations) :: any
 		rng = rng or Random.new()
 		assert(rng, `bad rng`)
-
+		Debug.log(`Running test with {test.Iterations} iterations and {#test.Parameters} parameters...`)
 		local permutedValues: { [number]: { any } | number } = {}
+
+		local checkPause = pollForPause(1 / 30)
 		do
 			local isAllPermuted = true
 			local function getAvailablePerms(paramCount: number)
-				return math.floor(test.Iterations ^ (1 / paramCount))
+				local out = math.floor(test.Iterations ^ (1 / paramCount))
+				Debug.log(
+					`Permutations available per parameter for {paramCount} parameters for {test.Iterations} iterations: {out}`
+				)
+				return out
 			end
+			Debug.log(`Generating permutations for test with {#test.Parameters} parameters...`)
 			for i, param in test.Parameters do
+				checkPause()
 				local permutations = Parameter.Any.permute(param, getAvailablePerms(#test.Parameters))
 				permutedValues[i] = permutations
+				Debug.log(
+					`Generated {if typeof(permutations) == "number" then permutations else #permutations} permutations for parameter #{i} "{param.Key}" which has type "{param.Type}"`
+				)
 				if typeof(permutations) == "number" then
 					isAllPermuted = false
 				end
 			end
 			while not isAllPermuted do
+				checkPause()
 				local largestPermCount = 0
 				local largestPermIndex = 0
 				local paramCount = 0
@@ -144,16 +157,24 @@ return {
 				if largestPermCount == 0 or paramCount == 0 then
 					break
 				end
+				if ENV.IS_VERBOSE then
+					local param = test.Parameters[largestPermIndex]
+					Debug.log(
+						`Cleared permutations for parameter #{largestPermIndex} "{param.Key}" which has type "{param.Type}" because it had the most permutations at {largestPermCount}`
+					)
+				end
 				permutedValues[largestPermIndex] = nil
 				isAllPermuted = true
+				local availablePerms = getAvailablePerms(paramCount)
 				for i, param in permutedValues do
-					local permutations = Parameter.Any.permute(test.Parameters[i], getAvailablePerms(paramCount))
+					local permutations = Parameter.Any.permute(test.Parameters[i], availablePerms)
 					permutedValues[i] = permutations
 					if typeof(permutations) == "number" then
 						isAllPermuted = false
 					end
 				end
 			end
+			Debug.log(`Completed generating permutations.`)
 		end
 		local finalPermutedValues: { [number]: { any }? } = {}
 		for i, perms in permutedValues do
@@ -171,9 +192,11 @@ return {
 				end
 			end
 			assert(permutationCount < test.Iterations, `permute failed, generated {permutationCount} values`)
+			Debug.log(
+				`Using permutations for {permutedParameterCount} parameters, resulting in {permutationCount} total permutations which will be repeated across the {test.Iterations} iterations`
+			)
 		end
-
-		local checkPause = pollForPause(1 / 30)
+		Debug.log(`Generating parameter sets for {test.Iterations} iterations...`)
 		for i = 1, test.Iterations do
 			checkPause()
 			local paramSet = table.create(#test.Parameters)
@@ -185,9 +208,9 @@ return {
 			parameters[i] = paramSet
 		end
 		table.freeze(parameters)
-
+		Debug.log(`Completed generating parameter sets.`)
 		local out: { TestResult } = table.create(test.Iterations) :: any
-
+		Debug.log(`Running {test.Iterations} test cases`)
 		for i, paramSet in parameters do
 			checkPause()
 			local jsonParams: { { key: string, value: Parameter.JSONValue } } = table.create(#paramSet) :: any
@@ -228,7 +251,7 @@ return {
 			out[i] = result
 		end
 		table.freeze(out)
-
+		Debug.log(`Completed running test.`)
 		return out
 	end,
 }

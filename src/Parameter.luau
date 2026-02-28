@@ -1663,13 +1663,13 @@ Parameter.Any.serialize = function(param: Parameter, value: any?): JSONValue
 		return fallbackSerializer(value)
 	end
 end
-Parameter.Any.permute = function(param: Parameter, value: any?, filterFunc: ((any) -> boolean)?): { any }?
+Parameter.Any.permute = function(param: Parameter, value: any?, filterFunc: ((any) -> boolean)?): { any } | number
 	local solver = Parameter[param.Type]
 	assert(solver, `bad solver: "{param.Type}"`)
 	if solver.permute then
 		return solver.permute(param, value, filterFunc)
 	end
-	return nil
+	return math.huge
 end
 
 return Parameter
