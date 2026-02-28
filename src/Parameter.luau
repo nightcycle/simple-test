@@ -1663,11 +1663,15 @@ Parameter.Any.serialize = function(param: Parameter, value: any?): JSONValue
 		return fallbackSerializer(value)
 	end
 end
-Parameter.Any.permute = function(param: Parameter, value: any?, filterFunc: ((any) -> boolean)?): { any } | number
+Parameter.Any.permute = function(
+	param: Parameter,
+	maxPermutations: number,
+	filterFunc: ((any) -> boolean)?
+): { any } | number
 	local solver = Parameter[param.Type]
 	assert(solver, `bad solver: "{param.Type}"`)
 	if solver.permute then
-		return solver.permute(param, value, filterFunc)
+		return solver.permute(param, maxPermutations, filterFunc)
 	end
 	return math.huge
 end
